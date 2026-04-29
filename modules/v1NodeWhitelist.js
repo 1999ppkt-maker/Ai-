@@ -66,8 +66,29 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
+function hasMenuLikeClass(el) {
+  if (!el) return false;
+  const className = String(el.className || '');
+  return /(menu|picker|ctx|dropdown|panel)/i.test(className);
+}
+
+function isPanelRelatedToGeneration(el) {
+  const panel = el?.closest?.(
+    '.v2-canvas-ctx-menu, .v2-menu-submenu, .node-add-menu, .empty-hint, .v2-node-picker, .v2-picker-menu, [class*="menu"], [class*="picker"], [class*="ctx"]',
+  );
+  if (!panel) return false;
+  const panelText = normalizeText(panel.textContent || '');
+  return (
+    panelText.includes(normalizeText('引用该节点生成')) ||
+    panelText.includes(normalizeText('画布自由生成')) ||
+    panelText.includes(normalizeText('生成节点')) ||
+    panelText.includes(normalizeText('源节点')) ||
+    hasMenuLikeClass(panel)
+  );
+}
+
 function inCreationScope(el) {
-  return !!el?.closest?.(CREATION_SCOPE_SELECTOR);
+  return !!el?.closest?.(CREATION_SCOPE_SELECTOR) || isPanelRelatedToGeneration(el);
 }
 
 function shouldHideByType(type) {
@@ -117,20 +138,26 @@ function shouldForceHideGenerationLabel(label) {
   return hasGenerateWord && hasBlockedMeaning;
 }
 
+function shouldHideEntry(type, label) {
+  return (
+    shouldHideByType(type) ||
+    shouldHideByLabel(label) ||
+    shouldForceHideGenerationLabel(label)
+  );
+}
+
 function filterCreationButtons(root = document) {
   const buttons = root.querySelectorAll(
-    '#nodeMenu .nam-item[data-type], .empty-hint .pill-btn[data-type], .v2-canvas-ctx-menu button, .v2-node-picker button',
+    '#nodeMenu .nam-item[data-type], .empty-hint .pill-btn[data-type], .v2-canvas-ctx-menu button, .v2-node-picker button, button, .v2-menu-row',
   );
 
   buttons.forEach((btn) => {
+    if (!inCreationScope(btn)) return;
+
     const type = btn.dataset?.type;
     const label = String(btn.textContent || '').trim();
 
-    if (
-      shouldHideByType(type) ||
-      shouldHideByLabel(label) ||
-      shouldForceHideGenerationLabel(label)
-    ) {
+    if (shouldHideEntry(type, label)) {
       hideElement(btn);
     }
   });
@@ -138,7 +165,7 @@ function filterCreationButtons(root = document) {
 
 function filterContextMenuRows(root = document) {
   const rows = root.querySelectorAll(
-    '.v2-menu-row, .v2-menu-submenu .v2-menu-row, .v2-canvas-ctx-menu .v2-menu-row, .v2-node-picker .v2-menu-row, button',
+    '.v2-menu-row, .v2-menu-submenu .v2-menu-row, .v2-canvas-ctx-menu .v2-menu-row, .v2-node-picker .v2-menu-row, [role="menuitem"], button',
   );
 
   rows.forEach((row) => {
@@ -147,11 +174,7 @@ function filterContextMenuRows(root = document) {
     const type = row.dataset?.type;
     const label = String(row.textContent || '').trim();
 
-    if (
-      shouldHideByType(type) ||
-      shouldHideByLabel(label) ||
-      shouldForceHideGenerationLabel(label)
-    ) {
+    if (shouldHideEntry(type, label)) {
       hideElement(row);
     }
   });
@@ -162,17 +185,13 @@ function preventBlockedClicks(event) {
   if (!(target instanceof Element)) return;
   if (!inCreationScope(target)) return;
 
-  const trigger = target.closest('button, .nam-item, .v2-menu-row');
+  const trigger = target.closest('button, .nam-item, .v2-menu-row, [role="menuitem"]');
   if (!trigger) return;
 
   const type = trigger.dataset?.type;
   const label = trigger.textContent || '';
 
-  if (
-    shouldHideByType(type) ||
-    shouldHideByLabel(label) ||
-    shouldForceHideGenerationLabel(label)
-  ) {
+  if (shouldHideEntry(type, label)) {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
